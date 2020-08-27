@@ -5,7 +5,9 @@ import ru.zakharov.util.ConsoleHelper;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 public class Server {
@@ -30,8 +32,11 @@ public class Server {
     }
 
     private static Message addAuthorToMessage(Message message, Client client) {
+        SimpleDateFormat formatter = new SimpleDateFormat("HH:mm:ss");
+        Calendar currentTime = Calendar.getInstance();
         String author = client.getUsername();
-        String editedMsg = String.format("%s: %s", author, message.getData());
+        String editedMsg = String.format("[%s] %s: %s",
+                formatter.format(currentTime.getTime()), author, message.getData());
         return new Message(editedMsg, MessageType.TEXT);
     }
 
