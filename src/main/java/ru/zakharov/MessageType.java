@@ -5,5 +5,7 @@ public enum MessageType {
     RESPONSE_NAME,
     NAME_ACCEPTED,
     TEXT,
-    INFO
+    INFO,
+    REQUEST_OPERATION,
+    RESPONSE_OPERATION
 }

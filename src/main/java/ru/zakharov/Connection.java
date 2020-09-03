@@ -6,7 +6,6 @@ import java.net.Socket;
 
 public class Connection implements Closeable {
 
-    private Client client;
     private Socket socket;
     private ObjectInputStream in;
     private ObjectOutputStream out;
@@ -26,14 +25,6 @@ public class Connection implements Closeable {
 
     public Message receiveMsg() throws IOException, ClassNotFoundException {
         return (Message) in.readObject();
-    }
-
-    public Client getClient() {
-        return client;
-    }
-
-    public void setClient(Client client) {
-        this.client = client;
     }
 
     public boolean isClose() {

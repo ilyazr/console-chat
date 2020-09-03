@@ -29,6 +29,13 @@ public class Client {
         this.username = username;
     }
 
+    @Override
+    public String toString() {
+        return "Client{" +
+                "username='" + username + '\'' +
+                '}';
+    }
+
     //Here we read all income messages!
     class MsgReader extends Thread {
         @Override
@@ -36,7 +43,9 @@ public class Client {
             while (!connection.isClose()) {
                 try {
                     Message incomeMsg = connection.receiveMsg();
-                    if (incomeMsg.getMsgType() == MessageType.TEXT || incomeMsg.getMsgType() == MessageType.INFO) {
+                    if (incomeMsg.getMsgType() == MessageType.TEXT
+                            || incomeMsg.getMsgType() == MessageType.INFO
+                            || incomeMsg.getMsgType() == MessageType.REQUEST_OPERATION) {
                         ConsoleHelper.writeMsg(incomeMsg.getData());
                     }
                 } catch (IOException | ClassNotFoundException e) {
@@ -54,6 +63,10 @@ public class Client {
 
     private void runClient() {
         new MsgReader().start();
+        loopForWritingMessages();
+    }
+
+    private void loopForWritingMessages() {
         while (!connection.isClose()) {
             while (true) {
                 try {
@@ -74,7 +87,6 @@ public class Client {
             Socket socket = new Socket(address, port);
             Connection connection = new Connection(socket);
             setConnection(connection);
-            this.connection.setClient(this);
             makeFriendWithServer();
 
         } catch (IOException e) {
