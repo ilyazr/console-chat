@@ -15,7 +15,14 @@ public class Server {
 
     private static final int PORT = 8080;
     public static final List<Client> allClients = new ArrayList<>();
+    public static final List<Chat> allChats = new ArrayList<>();
     public static BotHelper botHelper;
+
+    public static Client findUserByUsername(String name) {
+        return allClients.stream()
+                .filter(user -> user.getUsername().equalsIgnoreCase(name))
+                .findFirst().orElse(null);
+    }
 
     private static class BotHelper {
         private final String botName;
@@ -28,7 +35,9 @@ public class Server {
         public void startWorkWithBot(Client client) {
             greetingFromBot(client);
             OperationsOfBot operation = null;
+            int lastElementOfOp = OperationsOfBot.values().length-1;
             while (true) {
+                infoFromBot(client);
                 botHelper.listOfOperation(client);
                 Message respOfOperation = null;
                 try {
@@ -38,9 +47,17 @@ public class Server {
                                 .sendMsg(new Message("Working with bot is over!", MessageType.INFO));
                         break;
                     }
-                    OperationsOfBot requested =
-                            OperationsOfBot.values()[Integer.parseInt(respOfOperation.getData())];
-                    execOperation(requested, client);
+                    if (Integer.parseInt(respOfOperation.getData()) > lastElementOfOp ||
+                            Integer.parseInt(respOfOperation.getData()) < 0) {
+                        client.getConnection()
+                                .sendMsg(new Message(editForInfo("Ошибка! Такой операции не существует!"),
+                                        MessageType.TEXT));
+                    } else {
+                        OperationsOfBot requested =
+                                OperationsOfBot.values()[Integer.parseInt(respOfOperation.getData())];
+                        execOperation(requested, client);
+                    }
+
                 } catch (IOException | ClassNotFoundException e) {
                     e.printStackTrace();
                 }
@@ -53,10 +70,19 @@ public class Server {
                     " If you need help type command \"bot\"!";
         }
 
+        public void infoFromBot(Client client) {
+            String str = "If you want to stop type command \"stop\".";
+            Message msgFromBot = new Message(str, MessageType.INFO);
+            try {
+                client.getConnection().sendMsg(msgFromBot);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
         public void greetingFromBot(Client client) {
             String str = String.format("Hello %s! My name is %s " +
-                    "and I'm here to help you!\n" +
-                    "If you want to stop type command \"stop\".", client.getUsername(), botName);
+                    "and I'm here to help you!", client.getUsername(), botName);
             Message greeting = new Message(str, MessageType.INFO);
             try {
                 client.getConnection().sendMsg(greeting);
@@ -98,6 +124,24 @@ public class Server {
             return String.format("[BOT]: \t%s", str);
         }
 
+        private String editMsgForPM(String msg, Client client) {
+            return String.format("[PM FROM %s]: %s", client.getUsername(), msg);
+        }
+
+        private String editMsgForInvite(Chat chat, Client client) {
+            return String.format("[INVITE TO PRIVATE CHAT \"%s\" FROM %s]",
+                    chat.getChatName(), client.getUsername());
+        }
+
+        private String editMsgForAcceptedInvite(Chat chat, Client client) {
+            return String.format("[%s ACCEPTED THE INVITATION TO %S CHAT]",
+                    client.getUsername(), chat.getChatName());
+        }
+
+        private String editForInfo(String msg) {
+            return String.format("[INFO]:\t%s\n", msg);
+        }
+
         public void execOperation(OperationsOfBot operation, Client client) throws IOException {
             switch (operation) {
                 case CURRENT_DATE:
@@ -128,6 +172,224 @@ public class Server {
                     Message listOfUsers = new Message(editMsgForBot(sb.toString()), MessageType.INFO);
                     client.getConnection().sendMsg(listOfUsers);
                     break;
+
+                case PRIVATE_MESSAGE:
+                    sendPrivateMessage(client);
+                    break;
+
+                case CREATE_NEW_CHAT:
+                    createNewPrivateChat(client);
+                    break;
+
+                case ALL_CHATS_ON_SERVER:
+                    infoAboutAllChats(client);
+                    break;
+
+                case INVITE_USER_TO_THE_CHAT:
+                    if (client.getChat() == null) {
+                        break;
+                    }
+                    sendInvitesToTheChat(client);
+                    break;
+
+                case CHECK_ALL_INVITES:
+                    checkInvitesToChats(client);
+                    break;
+
+            }
+
+        }
+
+        private void checkInvitesToChats(Client client) {
+            try {
+                if (client.getAmountOfInvites() == 0) {
+                    String info = editForInfo("Количество приглашений: 0");
+                    client.getConnection()
+                            .sendMsg(new Message(info, MessageType.TEXT));
+                } else {
+                    String allInvites = client.listOfAllInvites();
+                    client.getConnection()
+                            .sendMsg(new Message(editForInfo("Чтобы принять инвайт, введите его номер. " +
+                                    "Для того, чтобы просто выйти, введите \"exit\""),
+                                    MessageType.TEXT));
+                    client.getConnection()
+                            .sendMsg(new Message(editForInfo(allInvites), MessageType.TEXT));
+                    Message responseAboutInvite = client.getConnection().receiveMsg();
+                    if (responseAboutInvite.getData().equalsIgnoreCase("exit")) {
+                        return;
+                    } else {
+                        int numberOfInvite = Integer.parseInt(responseAboutInvite.getData());
+                        Chat acceptedInvite = client.getInvitesToChats().get(numberOfInvite);
+                        acceptOfInvite(client, acceptedInvite);
+                    }
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void acceptOfInvite(Client client, Chat chat) {
+            try {
+                chat.addUser(client);
+                client.getInvitesToChats().remove(chat);
+
+                Client chatOwner = chat.getOwner();
+                String acceptedInvite = editMsgForAcceptedInvite(chat, client);
+                chatOwner.getConnection().sendMsg(new Message(acceptedInvite, MessageType.TEXT));
+
+                String acceptInfoToClient = editForInfo(String.format("Вы успешно вступили в \"%s\" чат!",
+                        chat.getChatName()));
+                client.getConnection().sendMsg(new Message(acceptInfoToClient, MessageType.TEXT));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void addInviteToClient(Client client, Chat chat) {
+            client.addChatInvite(chat);
+        }
+
+        private void infoAboutAllChats(Client client) {
+            if (allChats.size() == 0) {
+                try {
+                    client.getConnection()
+                            .sendMsg(new Message(editForInfo("На сервере нет приватных чатов!"), MessageType.INFO));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                StringBuilder infoMsg = new StringBuilder("Список всех чатов сервера:\n");
+                for (int i = 0; i < allChats.size(); i++) {
+                    Chat chat = allChats.get(i);
+                    infoMsg.append(editForInfo(String.format("Название: %s", chat.getChatName())));
+                    infoMsg.append(editForInfo(String.format("Владелец: %s", chat.getOwner().getUsername())));
+                    infoMsg.append(editForInfo(String.format("Кол-во пользователей/вместимость: %d/%d",
+                            chat.numberOfUsers(), chat.getMaxNumberOfClients())));
+                    if (chat.numberOfUsers() > 0) {
+                        infoMsg.append(editForInfo(chat.listOfUsers()));
+                    }
+                }
+                try {
+                    client.getConnection().sendMsg(new Message(infoMsg.toString(), MessageType.INFO));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        private void createNewPrivateChat(Client client) {
+            try {
+                String msg = editMsgForBot("Укажите название чата:");
+                client.getConnection().sendMsg(new Message(msg, MessageType.TEXT));
+                Message chatName = client.getConnection().receiveMsg();
+
+                String msg2 = editMsgForBot("Укажите максимальное количество участников: ");
+                client.getConnection().sendMsg(new Message(msg2, MessageType.TEXT));
+                Message maxNumberOfUsersInTheChat = client.getConnection().receiveMsg();
+
+                Chat chat = new Chat(chatName.getData(), Integer.parseInt(maxNumberOfUsersInTheChat.getData()));
+                chat.addOwner(client);
+                chat.addUser(client);
+                allChats.add(chat);
+
+                client.getConnection()
+                        .sendMsg(new Message(editForInfo(
+                                String.format("Чат с именем \"%s\" был успешно создан!", chat.getChatName())), MessageType.INFO));
+
+                String invites = editMsgForBot("Хотите ли вы пригласить кого-то в чат? [y/n]");
+                client.getConnection().sendMsg(new Message(invites, MessageType.TEXT));
+                Message responseAboutInvites = client.getConnection().receiveMsg();
+                if (responseAboutInvites.getData().equalsIgnoreCase("y")) {
+                    sendInvitesToTheChat(client);
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private int sendInvitesToTheChat(Client client) {
+            try {
+                Chat chat = client.getChat();
+                boolean checkFreeSpace = chat.checkFreeSpaceInChat();
+                if (checkFreeSpace) {
+                    client.getConnection()
+                            .sendMsg(new Message(editMsgForBot(String.format("Рассылаем приглашения в чат %s!",
+                                    chat.getChatName())), MessageType.TEXT));
+
+                    String msg = editMsgForBot("Введите имя пользователя, которого вы хотите пригласить:");
+                    client.getConnection().sendMsg(new Message(msg, MessageType.TEXT));
+                    Message invite = client.getConnection().receiveMsg();
+                    String invitedName = invite.getData();
+                    Client invitedClient = findUserByUsername(invitedName);
+
+                    if (invitedClient != null) {
+                        addInviteToClient(invitedClient, chat);
+                        String inviteToChat = editMsgForInvite(chat, client);
+                        invitedClient.getConnection().sendMsg(new Message(inviteToChat, MessageType.INFO));
+                        client.getConnection()
+                                .sendMsg(new Message(editForInfo(String.format("Приглашение было отправлено пользователю %s!",
+                                        invitedClient.getUsername())), MessageType.TEXT));
+                        return 1;
+
+                    } else {
+                        String err = editMsgForBot(String.format("Пользователя с именем %s не существует!", invitedName));
+                        client.getConnection().sendMsg(new Message(err, MessageType.TEXT));
+                        return -1;
+                    }
+
+                } else {
+                    System.out.println(chat.getMaxNumberOfClients());
+                    System.out.println(chat.numberOfUsers());
+                    String msg = editMsgForBot("В чате нет свободного места!");
+                    client.getConnection().sendMsg(new Message(msg, MessageType.TEXT));
+                    return -1;
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+            return -1;
+        }
+
+        private void sendPrivateMessage(Client client) {
+            Message nameRequest = new Message(editMsgForBot("Введите имя адресата:"), MessageType.TEXT);
+            try {
+                client.getConnection().sendMsg(nameRequest);
+                Message nameResponse = client.getConnection().receiveMsg();
+                String receiverName = nameResponse.getData();
+                Client receiver = findUserByUsername(receiverName);
+
+                if (receiver == null) {
+                    client.getConnection()
+                            .sendMsg(new Message(editMsgForBot(String.format("Пользователя с именем %s не существует!",
+                                    receiverName)),
+                                    MessageType.TEXT));
+                    client.getConnection()
+                            .sendMsg(new Message(editMsgForBot("Вы хотите отправить сообщение? [y/n]"), MessageType.TEXT));
+                    Message response = client.getConnection().receiveMsg();
+                    if (response.getData().equalsIgnoreCase("y")) {
+                        sendPrivateMessage(client);
+                    }
+                    else {
+                        client.getConnection()
+                                .sendMsg(new Message(editMsgForBot("Ошибка при отправке сообщения"),
+                                MessageType.TEXT));
+                    }
+                }
+                else {
+                    client.getConnection()
+                            .sendMsg(new Message(editMsgForBot("Введите текст сообщения:"), MessageType.TEXT));
+                    Message msgText = client.getConnection().receiveMsg();
+                    Message editedMsg = new Message(editMsgForPM(msgText.getData(), client), MessageType.TEXT);
+                    receiver.getConnection().sendMsg(editedMsg);
+
+                    //notification of sender
+                    String resultText = String.format("Сообщение было отправлено! Получатель - %s",
+                            receiver.getUsername());
+                    Message result = new Message(editMsgForBot(resultText), MessageType.TEXT);
+                    client.getConnection().sendMsg(result);
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
             }
 
         }

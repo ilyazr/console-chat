@@ -7,5 +7,6 @@ public enum MessageType {
     TEXT,
     INFO,
     REQUEST_OPERATION,
-    RESPONSE_OPERATION
+    RESPONSE_OPERATION,
+    INVITE_TO_CHAT
 }

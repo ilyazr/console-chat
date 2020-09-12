@@ -4,6 +4,8 @@ import ru.zakharov.util.ConsoleHelper;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Client {
 
@@ -16,6 +18,9 @@ public class Client {
 
     //Client info
     private String username;
+    private Chat chat;
+
+    private List<Chat> invitesToChats = new ArrayList<>();
 
     public Client() {
     }
@@ -115,6 +120,45 @@ public class Client {
     public static int requestOfPort() throws IOException {
         ConsoleHelper.writeMsg("Type port:");
         return ConsoleHelper.readInt();
+    }
+
+    public void addNewChat(Chat chat) {
+        this.chat = chat;
+        chat.setOwner(this);
+    }
+
+    public Chat getChat() {
+        return chat;
+    }
+
+    public void setChat(Chat chat) {
+        this.chat = chat;
+    }
+
+    public List<Chat> getInvitesToChats() {
+        return invitesToChats;
+    }
+
+    public void addChatInvite(Chat chat) {
+        invitesToChats.add(chat);
+    }
+
+    public String listOfAllInvites() {
+        StringBuilder sb = new StringBuilder(String.format("Количество приглашений: %d\n", invitesToChats.size()));
+        for (int i = 0; i < invitesToChats.size(); i++) {
+            Chat invite = invitesToChats.get(i);
+            sb.append(String.format("\t\t%d. Название: %s. Владелец: %s. Кол-во пользователей: %d\n",
+                    i, invite.getChatName(), invite.getOwner().getUsername(), invite.numberOfUsers()));
+        }
+        return sb.toString();
+    }
+
+    public int getAmountOfInvites() {
+        return invitesToChats.size();
+    }
+
+    public void setInvitesToChats(List<Chat> invitesToChats) {
+        this.invitesToChats = invitesToChats;
     }
 
     public boolean isPermit() {
